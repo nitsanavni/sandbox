@@ -1,6 +1,6 @@
 import test from "ava";
 import { Subject } from "rxjs";
-import { map, delay, filter, tap, take } from "rxjs/operators";
+import { map, delay, filter, tap, take, takeUntil } from "rxjs/operators";
 
 import meow from "meow";
 
@@ -14,17 +14,29 @@ const {
 test("infinite loop with rxjs", (t) => {
   t.plan(1);
   const subject = new Subject<number>();
+  const until = new Subject<void>();
 
-  const incr = (i) => ++i;
+  const count =
+    (i = 0) =>
+    () =>
+      i++;
 
   const obs = subject.pipe(
+    map(count()),
     filter((i) => i >= +iterations),
     take(1),
-    tap(() => sub.unsubscribe()),
+    tap(() => until.next()),
     tap((i) => t.is(i, +iterations))
   );
 
-  const sub = subject.pipe(map(incr), delay(2)).subscribe(subject);
+  // note the subject subscribes to itself
+  subject
+    .pipe(
+      takeUntil(until.pipe(take(1))),
+      // use delay to avoid direct recursion leading to stack overflow
+      delay(0)
+    )
+    .subscribe(subject);
 
   subject.next(0);
 
